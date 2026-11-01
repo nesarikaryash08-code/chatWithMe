@@ -23,7 +23,7 @@ test('worldwide location hierarchy and static application work', async () => {
  const countries = await (await fetch(base + '/api/locations')).json(); assert.ok(countries.length > 200); assert.ok(countries.some(c => c.id === 'IN'));
  const states = await (await fetch(base + '/api/locations?country=IN')).json(); assert.ok(states.some(c => c.id === 'MH'));
  const cities = await (await fetch(base + '/api/locations?country=IN&region=MH&q=Pune')).json(); assert.ok(cities.some(c => c.id === 'Pune'));
- const html = await fetch(base); assert.equal(html.status, 200); assert.match(await html.text(), /A small world/);
+ const html = await fetch(base); assert.equal(html.status, 200); assert.match(await html.text(), /id="match-form"/);
  assert.equal((await fetch(base + '/server.js')).status, 404);
 });
 test('two strangers match, type, send and deduplicate messages; rooms reject unauthorized IDs', async () => {

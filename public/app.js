@@ -45,18 +45,19 @@ function setState(next) {
  $('find').children[1].textContent = next === 'searching' ? 'Finding someone…' : active ? 'Conversation in progress' : 'Find someone';
  document.querySelectorAll('.scope, #country, #region, #city, #adult').forEach(el => el.disabled = busy);
  $('chat-toolbar').hidden = !active;
+ $('icebreakers').hidden = !active;
  $('search-actions').hidden = next !== 'searching';
  $('broaden').hidden = scope === 'country' || scope === 'nearby';
  $('message').disabled = !active;
  $('send').disabled = !active || !$('message').value.trim();
- $('message').placeholder = active ? 'Say something kind…' : 'A good conversation is one hello away…';
+ $('message').placeholder = active ? 'A little charm goes a long way…' : 'A little spark starts with a hello…';
  $('typing').textContent = '';
  if (!active) room = null;
 }
 function empty(title, text, searching = false) {
  $('conversation').className = 'conversation';
  const container = document.createElement('div'); container.className = `empty-state${searching ? ' searching' : ''}`; container.innerHTML = originalEmpty;
- if (title) { container.querySelector('.state-copy h2').textContent = title; container.querySelector('.state-copy p').textContent = text; container.querySelector('.small').textContent = searching ? 'A GOOD HELLO IS WORTH THE WAIT' : 'YOUR NEXT CONVERSATION IS OUT THERE'; }
+ if (title) { container.querySelector('.state-copy h2').textContent = title; container.querySelector('.state-copy p').textContent = text; container.querySelector('.small').textContent = searching ? 'SOME THINGS ARE WORTH A LITTLE ANTICIPATION' : 'THERE’S ALWAYS ROOM FOR ANOTHER HELLO'; }
  $('conversation').replaceChildren(container); icons(container);
 }
 function selectScope(value) {
@@ -107,9 +108,10 @@ async function join() {
  if (send('join', { adult: true, pool })) { setState('searching'); empty('Looking for your next hello…', 'We’ll connect you when someone in your chosen area is ready.', true); $('chat-title').textContent = 'Finding someone'; $('chat-subtitle').textContent = 'You’ll match only within your selected area.'; }
 }
 $('match-form').onsubmit = e => { e.preventDefault(); join(); };
-$('cancel').onclick = () => { if (send('leave')) { setState('idle'); empty(); $('chat-title').textContent = 'Your next conversation'; $('chat-subtitle').textContent = 'A stranger today. A good story tomorrow.'; } };
+$('cancel').onclick = () => { if (send('leave')) { setState('idle'); empty(); $('chat-title').textContent = 'A little room for chemistry'; $('chat-subtitle').textContent = 'Two strangers. One open-ended possibility.'; } };
 $('broaden').onclick = async () => { send('leave'); setState('idle'); selectScope('country'); await join(); };
 $('message').oninput = () => { $('send').disabled = status !== 'chat' || !$('message').value.trim(); if (status === 'chat' && Date.now() - lastTypingSent > 1200) { send('typing'); lastTypingSent = Date.now(); } };
+document.querySelectorAll('[data-opener]').forEach(button => { button.onclick = () => { if (status !== 'chat') return; $('message').value = button.dataset.opener; $('send').disabled = false; $('message').focus(); }; });
 $('message-form').onsubmit = e => { e.preventDefault(); const text = $('message').value.trim(); if (text && status === 'chat' && send('message', { text, room, id: crypto.randomUUID() })) { $('message').value = ''; $('send').disabled = true; } };
 $('next').onclick = async () => { send('leave'); setState('idle'); await join(); };
 $('leave').onclick = () => { send('leave'); setState('idle'); empty('A goodbye makes room for a hello.', 'Choose Find someone whenever you’re ready for another conversation.'); $('chat-title').textContent = 'Conversation ended'; $('chat-subtitle').textContent = 'Your chat has been cleared.'; };

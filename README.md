@@ -15,7 +15,8 @@ The server listens on port 3000; override with `PORT`. `npm run dev` restarts th
 
 ## Included
 
-- Responsive desktop/mobile interface, custom illustrations, safety/privacy dialogs.
+- Responsive desktop/mobile interface with a plum-and-rose theme, custom chat illustrations, and safety/privacy dialogs.
+- Optional opening-line suggestions draft a message without sending it, so users choose their own pace.
 - Country → region → searchable city selection, defaulting to Pune, Maharashtra, India.
 - Same-pool random matching; scopes never broaden without an explicit user action.
 - Optional nearest available matching within 100 km, with browser location permission. Coordinates round to 0.1 degrees and are never sent to a partner. Geolocation requires HTTPS or a loopback development origin.

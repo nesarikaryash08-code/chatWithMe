@@ -13,6 +13,11 @@ try {
  for (const page of [a,b]) { await page.locator('#adult').check(); await page.locator('#find').click(); }
  for (const page of [a,b]) await page.locator('#message').waitFor({ state: 'visible' });
  await a.waitForFunction(() => !document.getElementById('message').disabled);
+ await a.locator('[data-opener]').first().click();
+ assert.equal(await a.locator('#message').inputValue(), 'What’s your perfect spontaneous plan?');
+ assert.equal(await b.locator('.message-bubble').count(), 0, 'Opening lines should be drafts, not automatically sent');
+ await a.locator('#send').click();
+ await b.getByText('What’s your perfect spontaneous plan?', { exact: true }).waitFor();
  await a.locator('#message').fill('Hello from Pune!'); await a.locator('#send').click();
  await b.getByText('Hello from Pune!', { exact: true }).waitFor();
  await b.locator('#message').fill('<img src=x onerror=alert(1)>'); await b.locator('#send').click();
@@ -29,6 +34,8 @@ try {
  const m = await mobile.newPage(); m.on('pageerror', e => errors.push(e.message)); await m.goto(base); await m.waitForFunction(() => document.getElementById('city').value === 'Pune');
  assert.equal(await m.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'mobile horizontal overflow');
  await m.screenshot({ path: '/tmp/chatwithme-mobile.png', fullPage: true });
+ for (const width of [320, 768, 1024]) { await m.setViewportSize({ width, height: 900 }); assert.equal(await m.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `overflow at ${width}px`); }
+ await m.setViewportSize({ width: 390, height: 844 });
  await m.locator('[data-scope="nearby"]').click(); await m.locator('#nearby-info').waitFor({ state: 'visible' });
- assert.deepEqual(errors, []); console.log('Browser checks passed: desktop/mobile, dialogs, real two-session chat, safe text rendering, block, country search, cancel, nearby mode.');
+ assert.deepEqual(errors, []); console.log('Browser checks passed: desktop/mobile, dialogs, real two-session chat, safe text rendering, block, country search, cancel, nearby mode, opening-line drafts, responsive layouts from 320px.');
 } finally { await browser.close(); }

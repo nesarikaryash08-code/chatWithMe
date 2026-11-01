@@ -271,7 +271,7 @@ function appendAttachment(event) {
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (room !== viewingRoom || status !== 'chat') return;
     let binary = ''; for (let start = 0; start < bytes.length; start += 8192) binary += String.fromCharCode(...bytes.subarray(start, start + 8192));
-    showDialog(file.viewOnce ? 'Just this once.' : 'A photo from your chat.', '<div id="photo-viewer"></div><p class="capture-note">' + (file.viewOnce ? 'This photo cannot be reopened after you close it. ' : '') + 'Screenshots and screen recording cannot be prevented.</p>', file.viewOnce ? 'VIEW ONCE' : 'SHARED PHOTO');
+    showDialog(file.viewOnce ? 'Just this once.' : 'A photo from your chat.', '<div id="photo-viewer"></div>' + (file.viewOnce ? '<p class="capture-note">This photo cannot be reopened after you close it.</p>' : ''), file.viewOnce ? 'VIEW ONCE' : 'SHARED PHOTO');
     const image = document.createElement('img'); image.src = `data:${file.mime};base64,${btoa(binary)}`; image.alt = file.name; image.onerror = () => { image.remove(); if ($('photo-viewer')) $('photo-viewer').textContent = 'This image could not be displayed.'; }; $('photo-viewer').append(image);
    } else {
     const text = await response.text(); if (room !== viewingRoom || status !== 'chat') return;

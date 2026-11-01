@@ -96,3 +96,55 @@ test('WebSocket upgrade rejects unknown sessions, foreign origins and duplicate 
  const ws = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { Cookie: cookie } }); await new Promise(r => ws.once('open', r));
  await rejected({ Cookie: cookie }); ws.close(); await new Promise(r => ws.once('close', r));
 });
+test('Worldwide connects across countries without requiring coordinates', async () => {
+ const a = await client(), b = await client();
+ try {
+  a.send('join', { adult: true, pool: { scope: 'world', country: 'IN' } }); await a.wait('waiting');
+  b.send('join', { adult: true, pool: { scope: 'world', country: 'GB' } });
+  const [am, bm] = await Promise.all([a.wait('matched'), b.wait('matched')]);
+  assert.equal(am.room, bm.room); assert.equal(am.location, 'Worldwide'); assert.equal(am.nearest, false); assert.equal(am.lat, undefined);
+ } finally { await a.close(); await b.close(); }
+});
+for (const selected of [pool, { scope: 'region', country: 'IN', region: 'MH' }, { scope: 'country', country: 'IN' }, { scope: 'world' }]) {
+ test(`${selected.scope}: nearest mode chooses the closest eligible waiting stranger, not queue order`, async () => {
+  // Block these two first, so both can wait simultaneously for a third person.
+  const { a, b } = await paired(); const c = await client();
+  try {
+   a.send('block'); await a.wait('blocked'); await b.wait('partner_left');
+   a.send('join', { adult: true, pool: { ...selected, preferNearest: true, lat: 40.7, lon: -74 } }); await a.wait('waiting');
+   b.send('join', { adult: true, pool: { ...selected, preferNearest: true, lat: 19.1, lon: 72.9 } }); await b.wait('waiting');
+   c.send('join', { adult: true, pool: { ...selected, preferNearest: true, lat: 18.5, lon: 73.9 } });
+   const [bm, cm] = await Promise.all([b.wait('matched'), c.wait('matched')]);
+   assert.equal(bm.room, cm.room); assert.equal(cm.nearest, true); assert.equal(cm.lat, undefined); assert.equal(cm.lon, undefined); assert.equal(cm.geo, undefined);
+   // Mumbai-Pune is over 100 km: City/State/Country/World nearest has no Nearby radius cap.
+   assert.equal(a.queue.some(e => e.type === 'matched'), false);
+  } finally { await a.close(); await b.close(); await c.close(); }
+ });
+}
+test('nearest validates consent data and never silently switches to random or a broader scope', async () => {
+ const a = await client(), b = await client(), c = await client();
+ try {
+  a.send('join', { adult: true, pool: { scope: 'world', preferNearest: true } }); assert.match((await a.wait('error')).message, /location access/);
+  a.send('join', { adult: true, pool: { scope: 'world', preferNearest: true, lat: 91, lon: 0 } }); await a.wait('error');
+  a.send('join', { adult: true, pool: { scope: 'world', preferNearest: 'yes', lat: 0, lon: 0 } }); await a.wait('error');
+  a.send('join', { adult: true, pool: { scope: 'world', preferNearest: true, lat: 18.5, lon: 73.9 } }); await a.wait('waiting');
+  b.send('join', { adult: true, pool: { scope: 'world', preferNearest: false } }); await b.wait('waiting');
+  c.send('join', { adult: true, pool: { ...pool, preferNearest: true, lat: 18.5, lon: 73.9 } }); await c.wait('waiting');
+  for (const person of [a,b,c]) assert.equal(person.queue.some(e => e.type === 'matched'), false);
+ } finally { await a.close(); await b.close(); await c.close(); }
+});
+for (const preferNearest of [false, true]) {
+ test(`Nearby with nearest ${preferNearest ? 'on' : 'off'} respects radius and uses the selected ordering`, async () => {
+  const { a, b } = await paired(); const c = await client();
+  try {
+   a.send('block'); await a.wait('blocked'); await b.wait('partner_left');
+   a.send('join', { adult: true, pool: { scope: 'nearby', preferNearest, lat: 18.9, lon: 74.4 } }); await a.wait('waiting');
+   b.send('join', { adult: true, pool: { scope: 'nearby', preferNearest, lat: 18.6, lon: 74 } }); await b.wait('waiting');
+   c.send('join', { adult: true, pool: { scope: 'nearby', preferNearest, lat: 18.5, lon: 73.9 } });
+   const chosen = preferNearest ? b : a, remaining = preferNearest ? a : b;
+   const [cm, chosenMatch] = await Promise.all([c.wait('matched'), chosen.wait('matched')]);
+   assert.equal(cm.room, chosenMatch.room); assert.equal(cm.nearest, preferNearest);
+   assert.equal(remaining.queue.some(e => e.type === 'matched'), false);
+  } finally { await a.close(); await b.close(); await c.close(); }
+ });
+}

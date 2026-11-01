@@ -31,7 +31,7 @@ export function createApp({ reportDirectory = '.data' } = {}) {
   const distance = (a, b) => {
     const rad = n => n * Math.PI / 180;
     const dLat = rad(a.lat - b.lat), dLon = rad(a.lon - b.lon);
-    return 6371 * 2 * Math.asin(Math.sqrt(Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2));
+    return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2)));
   };
   function match(s) {
     let candidate, closest = Infinity;
@@ -39,8 +39,11 @@ export function createApp({ reportDirectory = '.data' } = {}) {
       const other = sessions.get(id);
       if (!other || other.id === s.id || !other.pool || other.ws?.readyState !== WebSocket.OPEN || other.blocked.has(s.id) || s.blocked.has(id) || other.lastPartner === s.id || s.lastPartner === id) continue;
       if (other.pool.key !== s.pool.key) continue;
-      const d = s.pool.scope === 'nearby' ? distance(s.pool.geo, other.pool.geo) : 0;
-      if (d <= 100 && d < closest) { candidate = other; closest = d; }
+      const needsDistance = s.pool.preferNearest || s.pool.scope === 'nearby';
+      const d = needsDistance ? distance(s.pool.geo, other.pool.geo) : 0;
+      const limit = s.pool.scope === 'nearby' ? 100 : Infinity;
+      const score = s.pool.preferNearest ? d : 0;
+      if (d <= limit && score < closest) { candidate = other; closest = score; }
     }
     if (!candidate) { waiting.add(s.id); emit(s, 'waiting'); return; }
     waiting.delete(candidate.id); waiting.delete(s.id);
@@ -48,24 +51,31 @@ export function createApp({ reportDirectory = '.data' } = {}) {
     rooms.set(id, room);
     for (const [a, b] of [[s, candidate], [candidate, s]]) {
       a.room = id; a.lastPartner = b.id;
-      emit(a, 'matched', { room: id, location: a.pool.scope === 'nearby' ? 'Within 100 km' : a.pool.label });
+      emit(a, 'matched', { room: id, location: a.pool.scope === 'nearby' ? 'Within 100 km' : a.pool.label, nearest: a.pool.preferNearest });
     }
   }
   function validatePool(p) {
-    if (!p || !['city', 'region', 'country', 'nearby'].includes(p.scope)) throw Error('Choose a matching area.');
-    if (p.scope === 'nearby') {
-      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) throw Error('Allow location access to find people nearby.');
-      return { scope: p.scope, key: 'nearby', label: 'Nearby', geo: { lat: Math.round(p.lat * 10) / 10, lon: Math.round(p.lon * 10) / 10 } };
+    if (!p || !['city', 'region', 'country', 'world', 'nearby'].includes(p.scope)) throw Error('Choose a matching area.');
+    if (p.preferNearest !== undefined && typeof p.preferNearest !== 'boolean') throw Error('Invalid nearest preference.');
+    const preferNearest = p.preferNearest ?? (p.scope === 'nearby');
+    let geo;
+    if (preferNearest || p.scope === 'nearby') {
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) throw Error('Allow location access for nearest or nearby matching.');
+      geo = { lat: Math.round(p.lat * 10) / 10, lon: Math.round(p.lon * 10) / 10 };
     }
+    // Location-sharing participants use their own queue; random mode never needs coordinates.
+    const makePool = (key, label) => ({ scope: p.scope, key: `${key}:${preferNearest ? 'nearest' : 'random'}`, label, preferNearest, ...(geo ? { geo } : {}) });
+    if (p.scope === 'nearby') return makePool('nearby', 'Nearby');
+    if (p.scope === 'world') return makePool('world', 'Worldwide');
     const country = countries.find(c => c.isoCode === p.country);
     if (!country) throw Error('Select a country.');
-    if (p.scope === 'country') return { scope: p.scope, key: `country:${country.isoCode}`, label: country.name };
+    if (p.scope === 'country') return makePool(`country:${country.isoCode}`, country.name);
     const state = getStates(p.country).find(s => s.isoCode === p.region);
     if (!state) throw Error('Select a state or region.');
-    if (p.scope === 'region') return { scope: p.scope, key: `region:${p.country}:${p.region}`, label: state.name };
+    if (p.scope === 'region') return makePool(`region:${p.country}:${p.region}`, state.name);
     const city = getCities(p.country, p.region).find(c => c.name === p.city);
     if (!city) throw Error('Select a city.');
-    return { scope: p.scope, key: `city:${p.country}:${p.region}:${city.name}`, label: city.name };
+    return makePool(`city:${p.country}:${p.region}:${city.name}`, city.name);
   }
   const server = http.createServer(async (req, res) => {
     try {

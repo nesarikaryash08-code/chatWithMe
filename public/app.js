@@ -19,13 +19,14 @@ function icons(root = document) { root.querySelectorAll('[data-icon]').forEach(e
 icons();
 const $ = id => document.getElementById(id);
 let scope = 'city', status = 'idle', ws, room, geo, countryList = [], cities = [], connected = false, reconnectTimer, toastTimer, typingTimer;
-let regionLoad = 0, cityLoad = 0, lastTypingSent = 0;
+let regionLoad = 0, cityLoad = 0, lastTypingSent = 0, searchAttempt = 0;
+const nearestByScope = { city: false, region: false, country: false, world: false, nearby: true };
 const originalEmpty = $('empty-state').innerHTML;
 const dialog = $('info-dialog');
 const pages = {
- how: ['SIMPLE BY DESIGN', 'One place. Two strangers.', '<ol><li><strong>Pick your corner.</strong> Choose a city, state, country, or people nearby. A chosen place is a chat pool, not proof of where someone lives.</li><li><strong>Find someone.</strong> We connect two people looking in the same area. If it’s quiet, you can choose to widen your search.</li><li><strong>Just say hello.</strong> Text in real time. Skip or leave whenever you like. No accounts or profiles.</li></ol><p>Closest matches people within 100 km using rounded coordinates. Availability depends on who is online.</p>'],
+ how: ['SIMPLE BY DESIGN', 'One place. Two strangers.', '<ol><li><strong>Pick your corner.</strong> Choose a city, state, country, Worldwide, or people nearby. A chosen place is a chat pool, not proof of where someone lives.</li><li><strong>Find someone.</strong> We connect two people looking in the same area. If it’s quiet, you can choose to widen your search.</li><li><strong>Just say hello.</strong> Text in real time. Skip or leave whenever you like. No accounts or profiles.</li></ol><p>Worldwide connects across all countries. Nearby stays within 100 km. Enable Nearest first in any area to choose the closest eligible person currently waiting in nearest mode, using rounded coordinates. Nearest and random modes have separate queues. Location access is required for nearest or nearby matching. Availability depends on who is online.</p>'],
  safety: ['YOUR COMFORT COMES FIRST', 'A kind corner of the internet.', '<p>For adults 18 and over. An age checkbox is a self-declaration, not age verification.</p><ul><li>Keep your full name, address, phone number, and financial details private.</li><li>Never send money or follow suspicious links.</li><li>Leave any conversation that makes you uncomfortable.</li><li>Block prevents another match with that temporary session. Reports save recent messages for manual review.</li></ul><p>This first version has no staffed or automatic moderation. For immediate danger, contact local emergency services.</p>'],
- privacy: ['LESS DATA. MORE CONVERSATION.', 'Private doesn’t mean untraceable.', '<p>No signup, permanent profile, or public chat history. An essential temporary cookie routes your connection and remembers blocks for up to six hours of inactivity.</p><p>Normal messages live only in server memory during an active conversation and disappear when it ends. Reports store up to 50 recent messages with temporary session identifiers for manual review, until an operator deletes them. Don’t share sensitive information.</p><p>Selected places are shared only as area labels. Nearby matching rounds coordinates to roughly 10 km before processing and never sends coordinates to your partner.</p><p>Connections use your network address for rate limits. Hosting providers may also keep connection logs. Use HTTPS in production; chat is not end-to-end encrypted.</p>'],
+ privacy: ['LESS DATA. MORE CONVERSATION.', 'Private doesn’t mean untraceable.', '<p>No signup, permanent profile, or public chat history. An essential temporary cookie routes your connection and remembers blocks for up to six hours of inactivity.</p><p>Normal messages live only in server memory during an active conversation and disappear when it ends. Reports store up to 50 recent messages with temporary session identifiers for manual review, until an operator deletes them. Don’t share sensitive information.</p><p>Selected places are shared only as area labels. Nearest and nearby matching round coordinates to roughly 10 km before processing and never send coordinates to your partner. Ordinary City, State, Country and Worldwide matching do not request your location.</p><p>Connections use your network address for rate limits. Hosting providers may also keep connection logs. Use HTTPS in production; chat is not end-to-end encrypted.</p>'],
  guidelines: ['A REAL PERSON ON THE OTHER SIDE', 'Be curious. Be kind.', '<ul><li>You must be 18 or older.</li><li>No harassment, hate, threats, sexual content, or exploitation.</li><li>No spam, scams, impersonation, or sharing anyone’s personal information.</li><li>Respect boundaries. A conversation can end at any time.</li></ul><p>Use Block or Report if something feels wrong. No personal information is needed to start a conversation.</p>']
 };
 function showDialog(title, html, kicker = 'CHATWITHME') {
@@ -40,14 +41,14 @@ function error(text) { $('form-error').textContent = text; }
 function send(type, data = {}) { if (!ws || ws.readyState !== WebSocket.OPEN) { toast('Connection unavailable. Reconnecting…'); return false; } ws.send(JSON.stringify({ type, ...data })); return true; }
 function setState(next) {
  status = next;
- const active = next === 'chat', busy = next === 'searching' || active;
+ const active = next === 'chat', busy = next === 'searching' || next === 'locating' || active;
  $('find').disabled = busy || !connected;
- $('find').children[1].textContent = next === 'searching' ? 'Finding someone…' : active ? 'Conversation in progress' : 'Find someone';
- document.querySelectorAll('.scope, #country, #region, #city, #adult').forEach(el => el.disabled = busy);
+ $('find').children[1].textContent = next === 'locating' ? 'Getting your location…' : next === 'searching' ? 'Finding someone…' : active ? 'Conversation in progress' : 'Find someone';
+ document.querySelectorAll('.scope, #country, #region, #city, #adult, #prefer-nearest').forEach(el => el.disabled = busy);
  $('chat-toolbar').hidden = !active;
  $('icebreakers').hidden = !active;
- $('search-actions').hidden = next !== 'searching';
- $('broaden').hidden = scope === 'country' || scope === 'nearby';
+ $('search-actions').hidden = next !== 'searching' && next !== 'locating';
+ $('broaden').hidden = next === 'locating' || ['country', 'nearby', 'world'].includes(scope);
  $('message').disabled = !active;
  $('send').disabled = !active || !$('message').value.trim();
  $('message').placeholder = active ? 'A little charm goes a long way…' : 'A little spark starts with a hello…';
@@ -63,12 +64,25 @@ function empty(title, text, searching = false) {
 function selectScope(value) {
  scope = value; geo = null; error('');
  document.querySelectorAll('.scope').forEach(b => { b.classList.toggle('active', b.dataset.scope === value); b.setAttribute('aria-pressed', String(b.dataset.scope === value)); });
- $('location-fields').hidden = value === 'nearby'; $('nearby-info').hidden = value !== 'nearby';
- $('region-field').hidden = value === 'country'; $('city-field').hidden = value !== 'city';
- $('country').required = value !== 'nearby'; $('region').required = value === 'region' || value === 'city'; $('city').required = value === 'city';
- $('location-note').innerHTML = value === 'nearby' ? 'Location access is optional.<br>Only a broad distance label is shared.' : 'Only your chosen area is shared.<br>Your exact location stays yours.';
+ $('location-fields').hidden = value === 'nearby' || value === 'world'; $('nearby-info').hidden = value !== 'nearby';
+ $('region-field').hidden = value === 'country' || value === 'world'; $('city-field').hidden = value !== 'city';
+ $('country').required = value !== 'nearby' && value !== 'world'; $('region').required = value === 'region' || value === 'city'; $('city').required = value === 'city';
+ $('prefer-nearest').checked = nearestByScope[value];
+ updateNearestHelp();
+ if (value !== 'city') $('city').setCustomValidity('');
 }
 document.querySelectorAll('.scope').forEach(b => { b.onclick = () => selectScope(b.dataset.scope); });
+function updateNearestHelp() {
+ const nearest = $('prefer-nearest').checked;
+ $('nearest-help').textContent = nearest
+  ? `On: closest waiting person in ${scope === 'world' ? 'the world' : scope === 'nearby' ? '100 km' : 'your chosen area'} using nearest mode. Requires location access.`
+  : scope === 'nearby' ? 'Off: anyone waiting within 100 km. Location access is still needed.' : 'Off: match anyone waiting in your chosen area.';
+ $('location-note').innerHTML = nearest || scope === 'nearby'
+  ? 'Coordinates are rounded and never shared.<br>Nearest and random use separate queues.'
+  : scope === 'world' ? 'Open to all countries.<br>No location access needed.' : 'Only your chosen area is shared.<br>Your exact location stays yours.';
+}
+$('prefer-nearest').onchange = () => { nearestByScope[scope] = $('prefer-nearest').checked; geo = null; error(''); updateNearestHelp(); };
+
 async function locations(params = {}) { const response = await fetch('/api/locations?' + new URLSearchParams(params)); if (!response.ok) throw Error('Could not load locations. Please refresh and try again.'); return response.json(); }
 function options(el, list, preferred, placeholder) {
  el.replaceChildren(); if (!list.length) el.add(new Option(placeholder, ''));
@@ -95,21 +109,30 @@ $('region').onchange = () => loadCities().catch(e => error(e.message));
 $('city').oninput = () => $('city').setCustomValidity('');
 async function join() {
  error('');
+ const attempt = ++searchAttempt;
  if (!connected) return toast('Waiting for the connection. Please try again shortly.');
  if (!$('adult').checked) return error('Confirm you are 18 or older to continue.');
- let pool = { scope, country: $('country').value, region: $('region').value, city: $('city').value.trim() };
+ let pool = { scope, preferNearest: $('prefer-nearest').checked, country: $('country').value, region: $('region').value, city: $('city').value.trim() };
  if (scope === 'city' && !cities.some(c => c.id === pool.city)) { $('city').setCustomValidity('Choose a city from the suggestions.'); $('city').reportValidity(); return; }
- if (scope === 'nearby') {
-   if (!navigator.geolocation) return error('Location is not supported here. Choose a city, state, or country.');
-   $('find').disabled = true; $('find').children[1].textContent = 'Getting your location…';
-   try { geo = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }), reject, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 })); pool = { scope, ...geo }; }
-   catch { $('find').disabled = false; $('find').children[1].textContent = 'Find someone'; return error('Location unavailable. Allow access in your browser, or choose a place manually.'); }
+ if (scope === 'nearby' || pool.preferNearest) {
+   if (!navigator.geolocation) return error('Location is not supported here. Turn off Nearest first and choose a place or Worldwide.');
+   setState('locating');
+   empty('A little closer to your next hello…', 'Allow location access, or cancel to choose a different matching mode.');
+   try {
+     geo = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(p => resolve({ lat: p.coords.latitude, lon: p.coords.longitude }), reject, { enableHighAccuracy: false, timeout: 12000, maximumAge: 300000 }));
+     if (attempt !== searchAttempt || !connected || status !== 'locating') return;
+     pool = { ...pool, ...geo };
+   } catch {
+     if (attempt !== searchAttempt) return;
+     setState('idle'); empty('Your location stays your choice.', 'Turn off Nearest first to match without sharing location, or allow browser location access and try again.');
+     return error('Location unavailable. Allow access, or turn off Nearest first and choose City, State, Country or Worldwide.');
+   }
  }
- if (send('join', { adult: true, pool })) { setState('searching'); empty('Looking for your next hello…', 'We’ll connect you when someone in your chosen area is ready.', true); $('chat-title').textContent = 'Finding someone'; $('chat-subtitle').textContent = 'You’ll match only within your selected area.'; }
+ if (send('join', { adult: true, pool })) { setState('searching'); empty('Looking for your next hello…', pool.preferNearest ? 'Looking for the closest waiting person using nearest mode in your selected area.' : scope === 'world' ? 'Your next hello could come from anywhere in the world.' : 'We’ll connect you when someone in your chosen area is ready.', true); $('chat-title').textContent = 'Finding someone'; $('chat-subtitle').textContent = `${scope === 'world' ? 'Worldwide' : 'Your selected area'} · ${pool.preferNearest ? 'Nearest first' : 'Any available person'}`; }
 }
 $('match-form').onsubmit = e => { e.preventDefault(); join(); };
-$('cancel').onclick = () => { if (send('leave')) { setState('idle'); empty(); $('chat-title').textContent = 'A little room for chemistry'; $('chat-subtitle').textContent = 'Two strangers. One open-ended possibility.'; } };
-$('broaden').onclick = async () => { send('leave'); setState('idle'); selectScope('country'); await join(); };
+$('cancel').onclick = () => { ++searchAttempt; if (send('leave')) { setState('idle'); empty(); $('chat-title').textContent = 'A little room for chemistry'; $('chat-subtitle').textContent = 'Two strangers. One open-ended possibility.'; } };
+$('broaden').onclick = async () => { send('leave'); setState('idle'); const keepNearest = $('prefer-nearest').checked; nearestByScope.country = keepNearest; selectScope('country'); await join(); };
 $('message').oninput = () => { $('send').disabled = status !== 'chat' || !$('message').value.trim(); if (status === 'chat' && Date.now() - lastTypingSent > 1200) { send('typing'); lastTypingSent = Date.now(); } };
 document.querySelectorAll('[data-opener]').forEach(button => { button.onclick = () => { if (status !== 'chat') return; $('message').value = button.dataset.opener; $('send').disabled = false; $('message').focus(); }; });
 $('message-form').onsubmit = e => { e.preventDefault(); const text = $('message').value.trim(); if (text && status === 'chat' && send('message', { text, room, id: crypto.randomUUID() })) { $('message').value = ''; $('send').disabled = true; } };
@@ -140,8 +163,8 @@ async function connect() {
    else if (event.type === 'waiting') { setState('searching'); }
    else if (event.type === 'matched') {
     setState('chat'); room = event.room; $('conversation').replaceChildren(); $('conversation').classList.add('messages');
-    systemMessage(`You’re connected with a stranger in ${event.location}. Say hello!`);
-    $('chat-title').textContent = 'Stranger'; $('chat-subtitle').textContent = `${event.location} · Connected now`;
+    systemMessage(event.location === 'Worldwide' ? 'You’re connected with a stranger from the worldwide pool. Say hello!' : `You’re connected with a stranger in ${event.location}. Say hello!`);
+    $('chat-title').textContent = 'Stranger'; $('chat-subtitle').textContent = `${event.location} · ${event.nearest ? 'Nearest first' : 'Connected now'}`;
     if (innerWidth > 700) $('message').focus(); else $('chat-title').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
    } else if (event.type === 'message') appendMessage(event);
    else if (event.type === 'typing') { $('typing').textContent = 'Stranger is typing…'; clearTimeout(typingTimer); typingTimer = setTimeout(() => $('typing').textContent = '', 1800); }
@@ -149,10 +172,11 @@ async function connect() {
    else if (event.type === 'blocked' || event.type === 'reported') { setState('idle'); dialog.close(); empty('Your comfort comes first.', event.type === 'reported' ? 'Report saved. This stranger has been blocked for your session.' : 'This stranger has been blocked for your session.'); $('chat-title').textContent = 'Conversation ended'; $('chat-subtitle').textContent = 'You’re always in control.'; toast(event.type === 'reported' ? 'Report saved for manual review.' : 'Stranger blocked.'); }
    else if (event.type === 'error') { error(event.message); toast(event.message); if (status === 'searching') { send('leave'); setState('idle'); empty('Let’s try that again.', event.message); } if ($('report-submit')) { $('report-submit').disabled = false; $('report-submit').textContent = 'Submit report & end chat'; } }
   };
-  ws.onclose = () => { connected = false; const wasActive = status !== 'idle'; setState('idle'); $('find').disabled = true; $('chat-title').textContent = 'Connection interrupted'; $('chat-subtitle').textContent = 'Reconnecting securely…'; if (wasActive) empty('Let’s reconnect.', 'This conversation has ended. Start a new search once you’re back online.'); error('Connection lost. Reconnecting… Close other tabs if this persists.'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 4000); };
+  ws.onclose = () => { ++searchAttempt; connected = false; const wasActive = status !== 'idle'; setState('idle'); $('find').disabled = true; $('chat-title').textContent = 'Connection interrupted'; $('chat-subtitle').textContent = 'Reconnecting securely…'; if (wasActive) empty('Let’s reconnect.', 'This conversation has ended. Start a new search once you’re back online.'); error('Connection lost. Reconnecting… Close other tabs if this persists.'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 4000); };
   ws.onerror = () => {};
  } catch (e) { error(e.message); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, 5000); }
 }
+selectScope('city');
 setState('idle');
 Promise.all([locations().then(async list => { countryList = list; options($('country'), list, 'IN', 'Select a country'); await loadRegions('MH', 'Pune'); }), connect()]).catch(e => error(e.message));
 setInterval(stats, 15000);

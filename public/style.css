@@ -459,3 +459,27 @@ dialog::backdrop { background: #1e101d99; }
   .footer { padding-bottom: 25px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .searching .spark-front { animation: none; } }
+
+/* One location choice, with a nearest preference remembered for each area. */
+.scope.world-scope { grid-column: 1 / -1; flex-direction: row; justify-content: flex-start; padding: 11px 12px; gap: 8px; }
+.scope-caption { font-size: 9px; font-weight: 400; margin-left: auto; opacity: .8; }
+.nearest-option { margin: 6px 0 16px; padding: 13px 12px; background: #faedef; border: 1px solid #f0d9e0; border-radius: 10px; }
+.nearest-label { display: flex; align-items: center; position: relative; gap: 10px; cursor: pointer; }
+.nearest-label>span:first-child { flex: 1; }
+.nearest-label strong { display: block; font-size: 12px; font-weight: 600; color: #84556b; }
+.nearest-label>span:first-child>span { display: block; font-size: 9px; color: #a07689; margin-top: 4px; }
+.nearest-label input { position: absolute; right: 0; width: 36px; height: 21px; margin: 0; opacity: 0; cursor: pointer; }
+.switch-track { width: 36px; height: 21px; border-radius: 20px; background: #dcc4cd; border: 1px solid #d2b2c0; transition: background .2s; pointer-events: none; }
+.switch-track::after { content: ''; display: block; width: 15px; height: 15px; border-radius: 50%; background: white; box-shadow: 0 1px 4px #62394f22; margin: 2px; transition: transform .2s; }
+.nearest-label input:checked+.switch-track { background: #a23e61; border-color: #a23e61; }
+.nearest-label input:checked+.switch-track::after { transform: translateX(15px); }
+.nearest-label input:focus-visible+.switch-track { outline: 2px solid #a23e61; outline-offset: 3px; }
+.nearest-label input:disabled+.switch-track { opacity: .55; }
+.nearest-label:has(input:disabled) { cursor: not-allowed; }
+#nearest-help { font-size: 9px; line-height: 1.6; color: #9c7487; margin: 10px 0 0; }
+.search-actions { flex-wrap: wrap; }
+@media (max-width: 700px) {
+  .nearest-label>span:first-child>span, #nearest-help { font-size: 10px; }
+  .scope-caption { font-size: 10px; }
+}
+@media (prefers-reduced-motion: reduce) { .switch-track, .switch-track::after { transition: none; } }

@@ -18,8 +18,11 @@ The server listens on port 3000; override with `PORT`. `npm run dev` restarts th
 - Responsive desktop/mobile interface with a plum-and-rose theme, custom chat illustrations, and safety/privacy dialogs.
 - Optional opening-line suggestions draft a message without sending it, so users choose their own pace.
 - Country → region → searchable city selection, defaulting to Pune, Maharashtra, India.
-- Same-pool random matching; scopes never broaden without an explicit user action.
-- Optional nearest available matching within 100 km, with browser location permission. Coordinates round to 0.1 degrees and are never sent to a partner. Geolocation requires HTTPS or a loopback development origin.
+- Worldwide matching across all countries, with no country/state/city selection required.
+- A **Nearest first** switch for City, State, Country, Worldwide, and Nearby. Each area remembers its own preference for the current page session. Off matches any eligible waiting person in that area; on selects the closest eligible waiting person using rounded browser locations.
+- Nearest and random modes have separate queues so location sharing is explicit for both participants. Neither silently changes modes or broadens the selected area.
+- City/State/Country/Worldwide nearest has no 100 km cap. Nearby alone stays within 100 km; its toggle chooses nearest ordering or any eligible person within that radius.
+- Nearest and Nearby require browser location permission. Coordinates round to 0.1 degrees and are never sent to a partner. A denial leaves users out of the queue, with instructions for switching modes themselves. Geolocation requires HTTPS or a loopback development origin. Chosen places are pool preferences, not verified physical locations.
 - Real WebSocket chat, typing indicators, recent-message deduplication, session and room validation, message/event rate limits, heartbeat cleanup.
 - Next, End, Block, and Report. The last partner is excluded until another match. Blocks last for the temporary session; clearing cookies can evade them.
 - Actual live connected-user count; empty pools wait for a real person.
@@ -30,9 +33,10 @@ The server listens on port 3000; override with `PORT`. `npm run dev` restarts th
 ```sh
 npm test
 node scripts/check-ui.mjs
+node scripts/check-matching-ui.mjs
 ```
 
-Server integration tests use isolated ephemeral ports and temporary report directories. Browser checks require Chromium at `/usr/bin/chromium` (override `CHROMIUM_PATH`) and a running app at port 3000 (override `TEST_URL`). They verify two independent sessions, real message delivery, safe rendering, block, dialogs, country search, cancellation and mobile layout. Screenshots are written to `/tmp/chatwithme-{desktop,mobile,conversation}.png`.
+Server integration tests use isolated ephemeral ports and temporary report directories. Browser checks require Chromium at `/usr/bin/chromium` (override `CHROMIUM_PATH`) and a running app at port 3000 (override `TEST_URL`). They verify independent sessions, real message delivery, safe rendering, block, dialogs, country search, cancellation and mobile layout. The matching browser checks additionally cover all scope toggles, independent preferences, Worldwide nearest chat, denied geolocation, and cancellation while location lookup is pending. Screenshots are written to `/tmp/chatwithme-{desktop,mobile,conversation}.png`.
 
 ## Storage and operation
 
@@ -44,4 +48,4 @@ For an Internet deployment, terminate HTTPS/WSS at a trusted reverse proxy, pres
 
 ## Architecture
 
-A small Node.js HTTP/WebSocket backend serves a dependency-free browser frontend. Matching is synchronous within one process so both users are reserved together. Country, region and city pools stay separate; nearest matching uses rounded coordinates and the haversine distance. This first implementation uses the runtime already available in the workspace rather than Spring Boot/Redis/PostgreSQL. Those can replace server storage/routing later without changing the anonymous product flow. Payments and subscriptions are intentionally outside this first version.
+A small Node.js HTTP/WebSocket backend serves a dependency-free browser frontend. Matching is synchronous within one process so both users are reserved together. City, region, country, Worldwide, and Nearby pools stay separate, as do nearest and random modes. Nearest matching compares rounded coordinates using haversine distance within the selected pool; it chooses from people currently waiting, not everyone online or future arrivals. This first implementation uses the runtime already available in the workspace rather than Spring Boot/Redis/PostgreSQL. Those can replace server storage/routing later without changing the anonymous product flow. Payments and subscriptions are intentionally outside this first version.

@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { attachmentStore } from './attachments.js';
 import { readFile, mkdir, appendFile } from 'node:fs/promises';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -21,10 +22,12 @@ export function createApp({ reportDirectory = '.data' } = {}) {
   const cookieId = req => /(?:^|;\s*)chat_session=([a-f0-9]{48})(?:;|$)/.exec(req.headers.cookie || '')?.[1];
   const session = req => sessions.get(cookieId(req));
   const json = (res, status, data, headers = {}) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }); res.end(JSON.stringify(data)); };
+  const attachments = attachmentStore({ session, sessionById: id => sessions.get(id), rooms, emit, rateLimit, json });
   function end(s, reason = 'left') {
     waiting.delete(s.id); s.pool = null;
     if (s.room) {
       const room = rooms.get(s.room); rooms.delete(s.room); s.room = null;
+      if (room) attachments.clearRoom(room);
       if (room) for (const id of room.members) { const member = sessions.get(id); if (member) { member.room = null; if (id !== s.id) emit(member, 'partner_left', { reason }); } }
     }
   }
@@ -99,6 +102,7 @@ export function createApp({ reportDirectory = '.data' } = {}) {
       res.setHeader('Referrer-Policy', 'same-origin');
       res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
       const url = new URL(req.url, 'http://localhost');
+      if (await attachments.handle(req, res, url)) return;
       if (url.pathname === '/api/session' && req.method === 'POST') {
         if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(res, 403, { error: 'Invalid origin' });
         let s = session(req);

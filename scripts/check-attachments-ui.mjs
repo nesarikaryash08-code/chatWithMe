@@ -1,0 +1,40 @@
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+const base = process.env.TEST_URL || 'http://127.0.0.1:3000';
+const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || '/usr/bin/chromium', headless: true, args: ['--no-sandbox'] });
+try {
+ const first = await browser.newContext({ viewport: { width: 1440, height: 1100 } }), second = await browser.newContext();
+ const a = await first.newPage(), b = await second.newPage(), errors = [], downloads = [];
+ for (const page of [a,b]) { page.on('pageerror', e => errors.push(e.message)); page.on('download', item => downloads.push(item.suggestedFilename())); await page.goto(base); await page.waitForFunction(() => document.getElementById('city').value === 'Pune' && !document.getElementById('find').disabled); assert.equal(await page.locator('#attach').isDisabled(), true); await page.locator('#adult').check(); await page.locator('#find').click(); }
+ await a.waitForFunction(() => !document.getElementById('attach').disabled);
+ await a.locator('#attachment-input').setInputFiles({ name: 'a-little-hello.txt', mimeType: 'text/plain', buffer: Buffer.from('Hello, friend!\n<script>window.shouldNotRun=true</script>') });
+ assert.equal(await a.locator('#view-once').isDisabled(), true); await a.locator('#upload-file').click();
+ await b.getByRole('button', { name: 'View file', exact: true }).click(); await b.locator('.text-file-preview').waitFor();
+ assert.match(await b.locator('.text-file-preview').textContent(), /<script>/); assert.equal(await b.evaluate(() => window.shouldNotRun), undefined);
+ await b.locator('#close-dialog').click();
+ const artwork = await browser.newPage({ viewport: { width: 480, height: 300 } });
+ await artwork.setContent('<html><body style="margin:0;height:100vh;display:grid;place-items:center;background:linear-gradient(130deg,#f9e2d5,#e3a0b7);color:#71384e;text-align:center;font:30px Georgia"><div><div style="font-size:55px">♡</div>A little hello from Pune.<div style="font:13px Arial;margin-top:15px">A shared moment. Just for you.</div></div></body></html>');
+ const photo = await artwork.screenshot(); await artwork.close();
+ await a.locator('#attachment-input').setInputFiles({ name: 'hello-from-pune.png', mimeType: 'image/png', buffer: photo });
+ assert.equal(await a.locator('#view-once').isChecked(), false); await a.locator('#view-once').check();
+ await a.screenshot({ path: '/tmp/chatwithme-attachment-toggle.png', fullPage: true });
+ await a.locator('#upload-file').click();
+ await b.getByRole('button', { name: 'Open once', exact: true }).waitFor();
+ assert.equal(await a.getByRole('button', { name: 'View once photo sent', exact: true }).isDisabled(), true);
+ await b.getByRole('button', { name: 'Open once', exact: true }).click();
+ await b.locator('#photo-viewer img').waitFor(); await b.waitForFunction(() => document.querySelector('#photo-viewer img')?.naturalWidth > 0);
+ assert.equal(await b.locator('a[download]').count(), 0); assert.equal(await b.getByRole('button', { name: /download/i }).count(), 0);
+ await b.screenshot({ path: '/tmp/chatwithme-view-once.png', fullPage: true });
+ await b.locator('#close-dialog').click(); await b.waitForFunction(() => !document.getElementById('photo-viewer'));
+ assert.equal(await b.getByRole('button', { name: 'Opened', exact: true }).isDisabled(), true);
+ assert.equal(await a.getByRole('button', { name: 'Opened', exact: true }).isDisabled(), true);
+ const card = b.locator('.message-row').filter({ hasText: 'hello-from-pune.png' });
+ const id = (await card.getAttribute('id')).replace('attachment-', '');
+ assert.equal((await second.request.get(`${base}/api/attachments/${id}/preview`)).status(), 410);
+ await a.locator('#attachment-input').setInputFiles({ name: 'cancelled.png', mimeType: 'image/png', buffer: photo }); await a.locator('#remove-file').click(); assert.equal(await a.locator('#attachment-draft').isVisible(), false);
+ await b.setViewportSize({ width: 390, height: 844 });
+ assert.equal(await b.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+ await b.locator('#leave').click(); assert.equal(await b.locator('#attach').isDisabled(), true);
+ assert.deepEqual(errors, []); assert.deepEqual(downloads, [], 'Viewing attachments must never trigger a browser download');
+ console.log('Attachment browser checks passed: uploads, safe text preview, View once toggle, single recipient opening, no download button, closing clears photo, cancellation, mobile layout, room-end cleanup.');
+} finally { await browser.close(); }

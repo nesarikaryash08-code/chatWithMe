@@ -16,6 +16,8 @@ The server listens on port 3000; override with `PORT`. `npm run dev` restarts th
 ## Included
 
 - Responsive desktop/mobile interface with a plum-and-rose theme, custom chat illustrations, and safety/privacy dialogs.
+- In-chat image and text-file attachments with progress, cancellation, and room-only access. Supported images: PNG, JPEG, GIF, WebP (10 MB each). Text: UTF-8 TXT, Markdown, CSV, JSON, log (1 MB each). Other formats, including PDF/video/archives, are not supported in this version. There are no download links, buttons, or dedicated download route.
+- **View once** is an optional toggle for photos. The recipient can open a photo once; its bytes are then removed from server storage. Closing the viewer removes the displayed image. The sender sees sent/opened status and cannot reopen the photo. A failed or interrupted first viewing also consumes it. Browser tools, screenshots, recording, and external cameras cannot be prevented; this feature does not guarantee copy protection.
 - Optional opening-line suggestions draft a message without sending it, so users choose their own pace.
 - Country → region → searchable city selection, defaulting to Pune, Maharashtra, India.
 - Worldwide matching across all countries, with no country/state/city selection required.
@@ -35,15 +37,16 @@ The server listens on port 3000; override with `PORT`. `npm run dev` restarts th
 npm test
 node scripts/check-ui.mjs
 node scripts/check-matching-ui.mjs
+node scripts/check-attachments-ui.mjs
 ```
 
 Server integration tests use isolated ephemeral ports and temporary report directories. Browser checks require Chromium at `/usr/bin/chromium` (override `CHROMIUM_PATH`) and a running app at port 3000 (override `TEST_URL`). They verify independent sessions, real message delivery, safe rendering, block, dialogs, country search, cancellation and mobile layout. The matching browser checks additionally cover all scope toggles, independent preferences, Worldwide nearest chat, denied geolocation, and cancellation while location lookup is pending. Screenshots are written to `/tmp/chatwithme-{desktop,mobile,conversation}.png`.
 
 ## Storage and operation
 
-Sessions, queues, rooms and normal messages live in process memory. Idle disconnected sessions expire after six hours. Restarting loses these; live conversations end immediately on disconnect. There is no reconnect history. Use a single server instance. Nothing is committed or pushed automatically.
+Sessions, queues, rooms, normal messages and attachments live in process memory. File storage is capped at 20 MB / 50 files per room and 100 MB across the server, including in-progress uploads. Uploads are limited to one per user at a time and 10 per minute. Uploads abort and all files become inaccessible when a chat ends, including disconnect, Next, Block and Report. No attachment binaries are written to disk. Idle disconnected sessions expire after six hours. Restarting loses these; live conversations end immediately on disconnect. There is no reconnect history. Use a single server instance. Nothing is committed or pushed automatically.
 
-Reports append the last 50 room messages, reason, time and temporary participant IDs to `.data/reports.jsonl` (ignored by Git, file mode 0600). Operators must review reports and delete records on their chosen retention schedule. There is **no automatic report review or ban enforcement**. The UI discloses this and does not pretend moderators are online. Normal room messages are discarded when a conversation ends. No persistent IP logging is implemented by this app; the HTTP host may have separate logs.
+Reports append the last 50 room messages (including attachment metadata, never file bytes), reason, time and temporary participant IDs to `.data/reports.jsonl` (ignored by Git, file mode 0600). Operators must review reports and delete records on their chosen retention schedule. There is **no automatic report review or ban enforcement**. The UI discloses this and does not pretend moderators are online. There is no malware-scanning service; supported image formats are detected by signature and text is always rendered as text. Normal room messages are discarded when a conversation ends. No persistent IP logging is implemented by this app; the HTTP host may have separate logs.
 
 For an Internet deployment, terminate HTTPS/WSS at a trusted reverse proxy, preserve the public Host/Origin, and set `SECURE_COOKIE=true`. Do not expose the report directory. Development is functional, but a public anonymous-chat launch needs a moderation operation, stronger adult-access and abuse controls, capacity/load testing, and a retention policy. A self-declared 18+ checkbox is not age verification; temporary blocks are not permanent bans. Chat is not end-to-end encrypted.
 

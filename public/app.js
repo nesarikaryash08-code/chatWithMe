@@ -1,4 +1,5 @@
 const paths = {
+ paperclip:'<path d="m21 11-9 9a6 6 0 0 1-8.5-8.5l10-10a4 4 0 0 1 5.7 5.7L9 17a2 2 0 0 1-2.8-2.8l9-9"/>',
  chat:'<path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/>',
  pin:'<path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
  shield:'<path d="M12 3 3 7v5c0 5 9 9 9 9s9-4 9-9V7l-9-4Z"/><path d="m8 12 3 3 5-6"/>',
@@ -19,14 +20,15 @@ function icons(root = document) { root.querySelectorAll('[data-icon]').forEach(e
 icons();
 const $ = id => document.getElementById(id);
 let scope = 'city', status = 'idle', ws, room, geo, countryList = [], cities = [], connected = false, reconnectTimer, toastTimer, typingTimer;
+let pendingFile = null, uploadRequest = null;
 let regionLoad = 0, cityLoad = 0, lastTypingSent = 0, searchAttempt = 0;
 const nearestByScope = { city: false, region: false, country: false, world: false, nearby: true };
 const originalEmpty = $('empty-state').innerHTML;
 const dialog = $('info-dialog');
 const pages = {
- how: ['SIMPLE BY DESIGN', 'One place. Two friends.', '<ol><li><strong>Pick your corner.</strong> Choose a city, state, country, Worldwide, or people nearby. A chosen place is a chat pool, not proof of where someone lives. City matching shows that city and country after matching. In other modes, you can optionally select a city and country to show in chat.</li><li><strong>Find someone.</strong> We connect two people looking in the same area. If it’s quiet, you can choose to widen your search.</li><li><strong>Just say hello.</strong> Text in real time. Skip or leave whenever you like. No accounts or profiles.</li></ol><p>Worldwide connects across all countries. Nearby stays within 100 km. Enable Nearest first in any area to choose the closest eligible person currently waiting in nearest mode, using rounded coordinates. Nearest and random modes have separate queues. Location access is required for nearest or nearby matching. Availability depends on who is online.</p>'],
- safety: ['YOUR COMFORT COMES FIRST', 'A kind corner of the internet.', '<p>For adults 18 and over. An age checkbox is a self-declaration, not age verification.</p><ul><li>Keep your full name, address, phone number, and financial details private.</li><li>Never send money or follow suspicious links.</li><li>Leave any conversation that makes you uncomfortable.</li><li>Block prevents another match with that temporary session. Reports save recent messages for manual review.</li></ul><p>This first version has no staffed or automatic moderation. For immediate danger, contact local emergency services.</p>'],
- privacy: ['LESS DATA. MORE CONVERSATION.', 'Private doesn’t mean untraceable.', '<p>No signup, permanent profile, or public chat history. An essential temporary cookie routes your connection and remembers blocks for up to six hours of inactivity.</p><p>Normal messages live only in server memory during an active conversation and disappear when it ends. Reports store up to 50 recent messages with temporary session identifiers for manual review, until an operator deletes them. Don’t share sensitive information.</p><p>City matching shows your selected city and country to your partner after matching. Other modes show only your selected country unless you choose to share a city; Worldwide and Nearby do not show a city or country unless you opt in. These are self-reported places, not verified physical locations. Nearest and nearby matching round coordinates to roughly 10 km before processing and never send coordinates to your partner. Ordinary City, State, Country and Worldwide matching do not request your location.</p><p>Connections use your network address for rate limits. Hosting providers may also keep connection logs. Use HTTPS in production; chat is not end-to-end encrypted.</p>'],
+ how: ['SIMPLE BY DESIGN', 'One place. Two friends.', '<ol><li><strong>Pick your corner.</strong> Choose a city, state, country, Worldwide, or people nearby. A chosen place is a chat pool, not proof of where someone lives. City matching shows that city and country after matching. In other modes, you can optionally select a city and country to show in chat.</li><li><strong>Find someone.</strong> We connect two people looking in the same area. If it’s quiet, you can choose to widen your search.</li><li><strong>Just say hello.</strong> Chat in real time, and share photos or text files. Skip or leave whenever you like. No accounts or profiles.</li></ol><p>Worldwide connects across all countries. Nearby stays within 100 km. Enable Nearest first in any area to choose the closest eligible person currently waiting in nearest mode, using rounded coordinates. Nearest and random modes have separate queues. Location access is required for nearest or nearby matching. Availability depends on who is online.</p>'],
+ safety: ['YOUR COMFORT COMES FIRST', 'A kind corner of the internet.', '<p>For adults 18 and over. An age checkbox is a self-declaration, not age verification.</p><ul><li>Keep your full name, address, phone number, and financial details private.</li><li>Never send money or follow suspicious links. Only open attachments you trust.</li><li>Leave any conversation that makes you uncomfortable.</li><li>Block prevents another match with that temporary session. Reports save recent messages for manual review.</li></ul><p>This first version has no staffed or automatic moderation. For immediate danger, contact local emergency services.</p>'],
+ privacy: ['LESS DATA. MORE CONVERSATION.', 'Private doesn’t mean untraceable.', '<p>No signup, permanent profile, or public chat history. An essential temporary cookie routes your connection and remembers blocks for up to six hours of inactivity.</p><p>Normal messages and attachments live only in server memory during an active conversation and disappear when it ends. View-once photos are removed from server memory after their first opening. Reports retain attachment names and metadata, not file contents. View once does not prevent screenshots, recording, or saving through browser tools. Reports store up to 50 recent messages with temporary session identifiers for manual review, until an operator deletes them. Don’t share sensitive information.</p><p>City matching shows your selected city and country to your partner after matching. Other modes show only your selected country unless you choose to share a city; Worldwide and Nearby do not show a city or country unless you opt in. These are self-reported places, not verified physical locations. Nearest and nearby matching round coordinates to roughly 10 km before processing and never send coordinates to your partner. Ordinary City, State, Country and Worldwide matching do not request your location.</p><p>Connections use your network address for rate limits. Hosting providers may also keep connection logs. Use HTTPS in production; chat is not end-to-end encrypted.</p>'],
  guidelines: ['A REAL PERSON ON THE OTHER SIDE', 'Be curious. Be kind.', '<ul><li>You must be 18 or older.</li><li>No harassment, hate, threats, sexual content, or exploitation.</li><li>No spam, scams, impersonation, or sharing anyone’s personal information.</li><li>Respect boundaries. A conversation can end at any time.</li></ul><p>Use Block or Report if something feels wrong. No personal information is needed to start a conversation.</p>']
 };
 function showDialog(title, html, kicker = 'CHATWITHME') {
@@ -50,6 +52,9 @@ function setState(next) {
  $('partner-place').hidden = !active;
  $('search-actions').hidden = next !== 'searching' && next !== 'locating';
  $('broaden').hidden = next === 'locating' || ['country', 'nearby', 'world'].includes(scope);
+ $('attach').disabled = !active || !!uploadRequest;
+ $('attachment-input').disabled = !active;
+ if (!active) { clearAttachment(); if ($('photo-viewer')) dialog.close(); document.querySelectorAll('.open-attachment').forEach(button => { button.disabled = true; button.textContent = 'Chat ended'; }); }
  $('message').disabled = !active;
  $('send').disabled = !active || !$('message').value.trim();
  $('message').placeholder = active ? 'A little charm goes a long way…' : 'A little spark starts with a hello…';
@@ -186,6 +191,8 @@ async function connect() {
     $('chat-title').textContent = 'Friend'; $('chat-subtitle').textContent = `${event.location} · ${event.nearest ? 'Nearest first' : 'Connected now'}`;
     if (innerWidth > 700) $('message').focus(); else $('chat-title').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
    } else if (event.type === 'message') appendMessage(event);
+   else if (event.type === 'attachment') appendAttachment(event);
+   else if (event.type === 'attachment_viewed') { const item = document.getElementById(`attachment-${event.id}`); if (item) { const button = item.querySelector('button'); if (button) { button.disabled = true; button.textContent = 'Opened'; } } }
    else if (event.type === 'typing') { $('typing').textContent = 'Friend is typing…'; clearTimeout(typingTimer); typingTimer = setTimeout(() => $('typing').textContent = '', 1800); }
    else if (event.type === 'partner_left') { setState('idle'); $('message').value = ''; systemMessage('Friend has left. Choose Find someone to start fresh.'); $('chat-title').textContent = 'Conversation ended'; $('chat-subtitle').textContent = 'Good conversations are still out there.'; }
    else if (event.type === 'blocked' || event.type === 'reported') { setState('idle'); dialog.close(); empty('Your comfort comes first.', event.type === 'reported' ? 'Report saved. This friend has been blocked for your session.' : 'This friend has been blocked for your session.'); $('chat-title').textContent = 'Conversation ended'; $('chat-subtitle').textContent = 'You’re always in control.'; toast(event.type === 'reported' ? 'Report saved for manual review.' : 'Friend blocked.'); }
@@ -199,3 +206,80 @@ selectScope('city');
 setState('idle');
 Promise.all([locations().then(async list => { countryList = list; options($('country'), list, 'IN', 'Select a country'); await loadRegions('MH', 'Pune'); }), connect()]).catch(e => error(e.message));
 setInterval(stats, 15000);
+
+function fileSize(bytes) { return bytes < 1024 * 1024 ? `${Math.max(1, Math.ceil(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`; }
+function clearAttachment() {
+ const xhr = uploadRequest; uploadRequest = null; if (xhr) xhr.abort();
+ pendingFile = null; $('attachment-input').value = ''; $('attachment-draft').hidden = true;
+ $('view-once').checked = false; $('view-once').disabled = false;
+ $('upload-progress').hidden = true; $('upload-progress').value = 0;
+ $('upload-file').disabled = false; $('upload-file').textContent = 'Send attachment';
+ $('attach').disabled = status !== 'chat'; $('attachment-error').textContent = '';
+}
+$('attach').onclick = () => $('attachment-input').click();
+$('remove-file').onclick = clearAttachment;
+$('attachment-input').onchange = () => {
+ const file = $('attachment-input').files[0]; if (!file) return;
+ clearAttachment();
+ if (status !== 'chat') return;
+ const image = /\.(png|jpe?g|gif|webp)$/i.test(file.name);
+ if (!image && !/\.(txt|md|csv|json|log)$/i.test(file.name)) { $('attachment-error').textContent = 'Supported: PNG, JPEG, GIF, WebP, TXT, Markdown, CSV, JSON and log files.'; return; }
+ if (!file.size || file.size > (image ? 10 : 1) * 1024 * 1024) { $('attachment-error').textContent = image ? 'Choose a non-empty image up to 10 MB.' : 'Choose a non-empty text file up to 1 MB.'; return; }
+ pendingFile = file; $('attachment-name').textContent = file.name; $('attachment-size').textContent = fileSize(file.size);
+ $('attachment-draft').hidden = false; $('view-once').disabled = !image;
+};
+$('upload-file').onclick = () => {
+ if (!pendingFile || status !== 'chat' || uploadRequest) return;
+ const params = new URLSearchParams({ room, name: pendingFile.name, viewOnce: String($('view-once').checked) });
+ const xhr = new XMLHttpRequest(); uploadRequest = xhr;
+ xhr.open('POST', `/api/attachments?${params}`); xhr.setRequestHeader('Content-Type', 'application/octet-stream'); xhr.timeout = 35000;
+ $('upload-file').disabled = true; $('view-once').disabled = true; $('attach').disabled = true;
+ $('upload-file').textContent = 'Sending…'; $('upload-progress').hidden = false; $('attachment-error').textContent = '';
+ xhr.upload.onprogress = e => { if (e.lengthComputable) $('upload-progress').value = Math.round(100 * e.loaded / e.total); };
+ const failure = message => {
+  if (uploadRequest !== xhr) return;
+  uploadRequest = null; $('upload-file').disabled = false; $('upload-file').textContent = 'Retry attachment';
+  $('attach').disabled = status !== 'chat'; $('view-once').disabled = !/\.(png|jpe?g|gif|webp)$/i.test(pendingFile?.name || '');
+  $('upload-progress').hidden = true; $('attachment-error').textContent = message;
+ };
+ xhr.onload = () => {
+  if (uploadRequest !== xhr) return;
+  if (xhr.status === 201) { uploadRequest = null; clearAttachment(); }
+  else { let message = 'Attachment could not be sent. Please try again.'; try { message = JSON.parse(xhr.responseText).error || message; } catch {} failure(message); }
+ };
+ xhr.onerror = () => failure('Upload interrupted. Check your connection and try again.');
+ xhr.ontimeout = () => failure('Upload timed out. Please try again.');
+ xhr.send(pendingFile);
+};
+function appendAttachment(event) {
+ const file = event.attachment;
+ const row = document.createElement('div'); row.className = 'message-row' + (event.mine ? ' mine' : ''); row.id = `attachment-${file.id}`;
+ const label = document.createElement('span'); label.className = 'message-label'; label.textContent = event.mine ? 'You' : 'Friend';
+ const card = document.createElement('div'); card.className = 'attachment-card';
+ const title = document.createElement('strong'); title.textContent = file.name;
+ const meta = document.createElement('span'); meta.textContent = `${fileSize(file.size)} · ${file.viewOnce ? 'View once photo' : file.image ? 'Photo' : 'Text file'}`;
+ const open = document.createElement('button'); open.type = 'button'; open.className = 'open-attachment';
+ open.textContent = file.viewOnce ? event.mine ? 'View once photo sent' : 'Open once' : file.image ? 'View photo' : 'View file';
+ open.disabled = file.viewOnce && event.mine;
+ open.onclick = async () => {
+  if (status !== 'chat') return;
+  const viewingRoom = room; open.disabled = true;
+  try {
+   const response = await fetch(file.previewUrl, { cache: 'no-store' });
+   if (!response.ok) { const result = await response.json(); throw Error(result.error); }
+   if (file.image) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (room !== viewingRoom || status !== 'chat') return;
+    let binary = ''; for (let start = 0; start < bytes.length; start += 8192) binary += String.fromCharCode(...bytes.subarray(start, start + 8192));
+    showDialog(file.viewOnce ? 'Just this once.' : 'A photo from your chat.', '<div id="photo-viewer"></div><p class="capture-note">' + (file.viewOnce ? 'This photo cannot be reopened after you close it. ' : '') + 'Screenshots and screen recording cannot be prevented.</p>', file.viewOnce ? 'VIEW ONCE' : 'SHARED PHOTO');
+    const image = document.createElement('img'); image.src = `data:${file.mime};base64,${btoa(binary)}`; image.alt = file.name; image.onerror = () => { image.remove(); if ($('photo-viewer')) $('photo-viewer').textContent = 'This image could not be displayed.'; }; $('photo-viewer').append(image);
+   } else {
+    const text = await response.text(); if (room !== viewingRoom || status !== 'chat') return;
+    showDialog('A little something to read.', '<pre id="photo-viewer" class="text-file-preview"></pre>', 'SHARED TEXT FILE'); $('photo-viewer').textContent = text;
+   }
+  } catch (e) { toast(e.message || 'This attachment is no longer available.'); }
+  finally { if (!file.viewOnce) open.disabled = status !== 'chat'; }
+ };
+ card.append(title, meta, open); row.append(label, card); $('conversation').append(row); $('conversation').scrollTop = $('conversation').scrollHeight;
+}
+dialog.addEventListener('close', () => { if ($('photo-viewer')) $('dialog-content').replaceChildren(); });

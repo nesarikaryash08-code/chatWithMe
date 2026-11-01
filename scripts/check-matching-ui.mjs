@@ -47,7 +47,7 @@ try {
  await page.locator('#form-error').filter({ hasText: 'Location unavailable' }).waitFor();
  assert.equal(await page.locator('#prefer-nearest').isChecked(), true, 'denial must not silently disable nearest');
  assert.equal(await page.locator('#cancel').isVisible(), false, 'denial must not join a queue');
- await page.locator('#prefer-nearest').uncheck(); await page.locator('#find').click(); await page.getByText('Your next hello could come from anywhere in the world.').waitFor(); await page.locator('#cancel').click();
+ await page.locator('#prefer-nearest').uncheck(); await page.locator('#find').click(); await page.getByText('Waiting for someone from any country.').waitFor(); await page.locator('#cancel').click();
  // Simulate a slow location prompt: cancel must invalidate its eventual callback.
  await page.evaluate(() => {
   window.sentEvents = []; const send = WebSocket.prototype.send;

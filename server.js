@@ -58,12 +58,12 @@ export function createApp({ reportDirectory = '.data' } = {}) {
     }
   }
   function validatePool(p) {
-    if (!p || !['city', 'region', 'country', 'world', 'nearby'].includes(p.scope)) throw Error('Choose a matching area.');
-    if (p.preferNearest !== undefined && typeof p.preferNearest !== 'boolean') throw Error('Invalid nearest preference.');
+    if (!p || !['city', 'region', 'country', 'world', 'nearby'].includes(p.scope)) throw Error('Select an area to find someone.');
+    if (p.preferNearest !== undefined && typeof p.preferNearest !== 'boolean') throw Error('Check the Nearest first option and try again.');
     const preferNearest = p.preferNearest ?? (p.scope === 'nearby');
     let geo;
     if (preferNearest || p.scope === 'nearby') {
-      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) throw Error('Allow location access for nearest or nearby matching.');
+      if (!Number.isFinite(p.lat) || !Number.isFinite(p.lon) || Math.abs(p.lat) > 90 || Math.abs(p.lon) > 180) throw Error('Please allow location access to use Nearest first or Nearby.');
       geo = { lat: Math.round(p.lat * 10) / 10, lon: Math.round(p.lon * 10) / 10 };
     }
     // Location-sharing participants use their own queue; random mode never needs coordinates.
@@ -83,10 +83,10 @@ export function createApp({ reportDirectory = '.data' } = {}) {
   function displayLocation(value, pool) {
     // Display places are chosen by participants, never claimed as verified GPS locations.
     if (value !== undefined && value !== null) {
-      if (!value || typeof value !== 'object' || typeof value.country !== 'string' || typeof value.city !== 'string' || value.city.length > 150) throw Error('Choose a valid city and country to share.');
+      if (!value || typeof value !== 'object' || typeof value.country !== 'string' || typeof value.city !== 'string' || value.city.length > 150) throw Error('Select a city and country from the lists.');
       const country = countries.find(c => c.isoCode === value.country);
       const city = country && City.getCitiesOfCountry(country.isoCode).find(c => c.name === value.city);
-      if (!city) throw Error('Choose a valid city and country to share.');
+      if (!city) throw Error('Select a city and country from the lists.');
       return { city: city.name, country: country.name, label: `${city.name}, ${country.name}`, source: 'shared' };
     }
     if (['city', 'region', 'country'].includes(pool.scope)) {
@@ -104,10 +104,10 @@ export function createApp({ reportDirectory = '.data' } = {}) {
       const url = new URL(req.url, 'http://localhost');
       if (await attachments.handle(req, res, url)) return;
       if (url.pathname === '/api/session' && req.method === 'POST') {
-        if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(res, 403, { error: 'Invalid origin' });
+        if (req.headers.origin && req.headers.origin !== `http://${req.headers.host}` && req.headers.origin !== `https://${req.headers.host}`) return json(res, 403, { error: 'Please open the chat from this website.' });
         let s = session(req);
         if (!s) {
-          if (!rateLimit(`session:${req.socket.remoteAddress}`, 60, 60_000)) return json(res, 429, { error: 'Too many sessions. Try again in a minute.' });
+          if (!rateLimit(`session:${req.socket.remoteAddress}`, 60, 60_000)) return json(res, 429, { error: 'Too many connections. Please try again in a minute.' });
           const id = randomBytes(24).toString('hex');
           s = { id, blocked: new Set(), room: null, ws: null, touched: Date.now() }; sessions.set(id, s);
         }
@@ -116,16 +116,16 @@ export function createApp({ reportDirectory = '.data' } = {}) {
       if (url.pathname === '/api/locations') {
         const country = url.searchParams.get('country'), region = url.searchParams.get('region');
         const q = (url.searchParams.get('q') || '').toLowerCase();
-        if (country && !countries.some(c => c.isoCode === country)) return json(res, 400, { error: 'Unknown country' });
-        if (region && (!country || !getStates(country).some(s => s.isoCode === region))) return json(res, 400, { error: 'Unknown region' });
+        if (country && !countries.some(c => c.isoCode === country)) return json(res, 400, { error: 'Select a country from the list.' });
+        if (region && (!country || !getStates(country).some(s => s.isoCode === region))) return json(res, 400, { error: 'Select a state or region from the list.' });
         const list = !country ? countries.map(c => ({ id: c.isoCode, name: c.name, flag: c.flag })) : !region ? getStates(country).map(s => ({ id: s.isoCode, name: s.name })) : getCities(country, region).map(c => ({ id: c.name, name: c.name }));
         return json(res, 200, list.filter(v => v.name.toLowerCase().includes(q)));
       }
       if (url.pathname === '/api/stats') return json(res, 200, { online: [...sessions.values()].filter(s => s.ws?.readyState === WebSocket.OPEN).length });
       if (url.pathname === '/health') return json(res, 200, { ok: true });
-      if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed' });
+      if (req.method !== 'GET') return json(res, 405, { error: 'This request is not supported.' });
       const files = { '/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css', '/favicon.svg': 'favicon.svg' };
-      const file = files[url.pathname]; if (!file) return json(res, 404, { error: 'Not found' });
+      const file = files[url.pathname]; if (!file) return json(res, 404, { error: 'Page not found.' });
       const body = await readFile(new URL(`./public/${file}`, import.meta.url));
       res.writeHead(200, { 'Content-Type': file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.svg') ? 'image/svg+xml' : 'text/html' }); res.end(body);
     } catch { json(res, 500, { error: 'Something went wrong. Please try again.' }); }
@@ -140,10 +140,10 @@ export function createApp({ reportDirectory = '.data' } = {}) {
       ws.on('pong', () => { ws.alive = true; s.touched = Date.now(); });
       ws.on('message', async raw => {
         try {
-          if (!rateLimit(`events:${s.id}`, 100, 60_000)) throw Error('Slow down a little. Please try again in a minute.');
+          if (!rateLimit(`events:${s.id}`, 100, 60_000)) throw Error('Too many requests. Please try again in a minute.');
           const event = JSON.parse(raw); s.touched = Date.now();
           if (event.type === 'join') {
-            if (event.adult !== true) throw Error('Confirm that you are 18 or older.');
+            if (event.adult !== true) throw Error('Confirm that you are 18 or above.');
             if (!rateLimit(`join:${s.id}`, 20, 60_000)) throw Error('Please wait a minute before searching again.');
             const pool = validatePool(event.pool);
             const place = displayLocation(event.displayLocation, event.pool);
@@ -151,29 +151,29 @@ export function createApp({ reportDirectory = '.data' } = {}) {
           } else if (event.type === 'leave') { end(s); emit(s, 'left'); }
           else if (event.type === 'message') {
             const room = rooms.get(s.room);
-            if (!room || event.room !== room.id) throw Error('This conversation has ended.');
+            if (!room || event.room !== room.id) throw Error('This chat has ended.');
             const content = typeof event.text === 'string' ? event.text.trim() : '';
-            if (!content || content.length > 1000) throw Error('Messages must be between 1 and 1,000 characters.');
-            if (!rateLimit(`message:${s.id}`, 30, 10_000)) throw Error('You are sending messages too quickly.');
-            if (typeof event.id !== 'string' || event.id.length > 80) throw Error('Invalid message.');
+            if (!content || content.length > 1000) throw Error('Type a message with 1 to 1,000 characters.');
+            if (!rateLimit(`message:${s.id}`, 30, 10_000)) throw Error('You are sending messages too fast. Please wait a few seconds.');
+            if (typeof event.id !== 'string' || event.id.length > 80) throw Error('Could not send this message. Please try again.');
             if (room.messages.some(m => m.id === event.id && m.sender === s.id)) return;
             room.messages.push({ id: event.id, sender: s.id, text: content, time: Date.now() }); room.messages = room.messages.slice(-50);
             for (const id of room.members) emit(sessions.get(id), 'message', { id: event.id, text: content, mine: id === s.id });
           } else if (event.type === 'typing') {
             const room = rooms.get(s.room); if (room && rateLimit(`typing:${s.id}`, 4, 1000)) for (const id of room.members) if (id !== s.id) emit(sessions.get(id), 'typing');
           } else if (event.type === 'block' || event.type === 'report') {
-            const room = rooms.get(s.room); if (!room) throw Error('This conversation has ended.');
+            const room = rooms.get(s.room); if (!room) throw Error('This chat has ended.');
             const other = room.members.find(id => id !== s.id);
             if (event.type === 'report') {
-              if (!['Harassment or hate', 'Sexual content', 'Spam or scam', 'Underage user', 'Something else'].includes(event.reason)) throw Error('Choose a report reason.');
+              if (!['Harassment or hate', 'Sexual content', 'Spam or scam', 'Underage user', 'Something else'].includes(event.reason)) throw Error('Select a reason for your report.');
               try {
               await mkdir(reportDirectory, { recursive: true, mode: 0o700 });
               await appendFile(`${reportDirectory}/reports.jsonl`, JSON.stringify({ id: randomUUID(), reporter: s.id, reported: other, reason: event.reason, time: Date.now(), messages: room.messages }) + '\n', { mode: 0o600 });
-              } catch { throw Error('Your report could not be saved. Please try again or use Block.'); }
+              } catch { throw Error('Could not send your report. Please try again or block this friend.'); }
             }
             s.blocked.add(other); end(s, 'left'); emit(s, event.type === 'report' ? 'reported' : 'blocked');
-          } else throw Error('Unknown action.');
-        } catch (error) { emit(s, 'error', { message: error instanceof SyntaxError ? 'Invalid request.' : error.message }); }
+          } else throw Error('Could not complete this action. Please try again.');
+        } catch (error) { emit(s, 'error', { message: error instanceof SyntaxError ? 'Could not read this request. Please try again.' : error.message }); }
       });
       ws.on('close', () => { if (s.ws === ws) { end(s, 'disconnected'); s.ws = null; s.touched = Date.now(); } });
       ws.on('error', () => ws.close());

@@ -24,11 +24,22 @@ try {
   assert.equal(await page.locator('#location-fields').isVisible(), false);
   await page.locator('#adult').check();
  }
+ await a.page.locator('#share-city').check();
+ await b.page.locator('#share-city').check();
+ await b.page.locator('#country').selectOption('GB');
+ await b.page.waitForFunction(() => [...document.getElementById('region').options].some(o => o.value === 'ENG'));
+ await b.page.locator('#region').selectOption('ENG');
+ await b.page.locator('#cities option[value="London"]').waitFor({ state: 'attached' });
+ await b.page.locator('#city').fill('London');
  await a.page.screenshot({ path: '/tmp/chatwithme-worldwide.png', fullPage: true });
  await a.page.locator('#find').click(); await a.page.waitForFunction(() => document.getElementById('find').textContent.includes('Finding someone'));
  assert.equal(await a.page.locator('#prefer-nearest').isDisabled(), true);
  await b.page.locator('#find').click();
  for (const { page } of [a,b]) { await page.waitForFunction(() => !document.getElementById('message').disabled); assert.match(await page.locator('#chat-subtitle').textContent(), /Worldwide · Nearest first/); }
+ assert.equal(await a.page.locator('#partner-location').textContent(), 'London, United Kingdom');
+ assert.equal(await b.page.locator('#partner-location').textContent(), 'Pune, India');
+ assert.equal(await a.page.locator('#location-source').textContent(), 'Shared location');
+ await a.page.screenshot({ path: '/tmp/chatwithme-shared-location.png', fullPage: true });
  await a.page.locator('#message').fill('Hello, world!'); await a.page.locator('#send').click(); await b.page.getByText('Hello, world!', { exact: true }).waitFor();
  await a.context.close(); await b.context.close();
  const denied = await pageFor({ viewport: { width: 390, height: 844 } }); const page = denied.page;
@@ -49,5 +60,5 @@ try {
  assert.equal(await page.locator('#find').isDisabled(), false);
  await page.screenshot({ path: '/tmp/chatwithme-worldwide-mobile.png', fullPage: true });
  assert.deepEqual(errors, []);
- console.log('Matching browser checks passed: all scope toggles, independent preferences, Worldwide nearest chat across continents, location denial, random fallback by choice, cancelled location lookup.');
+ console.log('Matching browser checks passed: all scope toggles, independent preferences, Worldwide nearest chat across continents, location denial, random fallback by choice, cancelled location lookup, correct partner city/country in Worldwide matching.');
 } finally { await browser.close(); }

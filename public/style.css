@@ -483,3 +483,14 @@ dialog::backdrop { background: #1e101d99; }
   .scope-caption { font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .switch-track, .switch-track::after { transition: none; } }
+
+.share-city-option { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 16px; color: #865769; font-size: 10px; line-height: 1.5; }
+.share-city-option input { accent-color: var(--rose); margin: 2px 0 0; flex-shrink: 0; }
+.share-city-option small { display: block; color: #a07b8c; font-size: 9px; margin-top: 3px; }
+.partner-place { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 7px; color: #a03c64; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.partner-place>span:first-child svg { width: 13px; height: 13px; }
+.location-source { padding: 2px 5px; border: 1px solid #efdae1; border-radius: 4px; font-size: 8px; font-weight: 400; color: #a67d91; }
+.chat-title { min-width: 0; }
+.chat-title>div { min-width: 0; }
+#partner-location { overflow-wrap: anywhere; }
+@media (max-width: 700px) { .share-city-option { font-size: 11px; } .share-city-option small { font-size: 10px; } .partner-place { font-size: 11px; } }

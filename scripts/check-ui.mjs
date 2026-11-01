@@ -13,6 +13,8 @@ try {
  for (const page of [a,b]) { await page.locator('#adult').check(); await page.locator('#find').click(); }
  for (const page of [a,b]) await page.locator('#message').waitFor({ state: 'visible' });
  await a.waitForFunction(() => !document.getElementById('message').disabled);
+ assert.equal(await a.locator('#partner-location').textContent(), 'Pune, India');
+ assert.equal(await b.locator('#partner-location').textContent(), 'Pune, India');
  await a.locator('[data-opener]').first().click();
  assert.equal(await a.locator('#message').inputValue(), 'What’s your perfect spontaneous plan?');
  assert.equal(await b.locator('.message-bubble').count(), 0, 'Opening lines should be drafts, not automatically sent');
@@ -20,6 +22,9 @@ try {
  await b.getByText('What’s your perfect spontaneous plan?', { exact: true }).waitFor();
  await a.locator('#message').fill('Hello from Pune!'); await a.locator('#send').click();
  await b.getByText('Hello from Pune!', { exact: true }).waitFor();
+ await b.locator('#message').fill('Hey! A spontaneous coffee and a long walk. What about you?'); await b.locator('#send').click();
+ await a.getByText('Hey! A spontaneous coffee and a long walk. What about you?', { exact: true }).waitFor();
+ await a.screenshot({ path: '/tmp/chatwithme-location-chat.png', fullPage: true });
  await b.locator('#message').fill('<img src=x onerror=alert(1)>'); await b.locator('#send').click();
  await a.getByText('<img src=x onerror=alert(1)>', { exact: true }).waitFor();
  assert.equal(await a.locator('.message-bubble img').count(), 0);

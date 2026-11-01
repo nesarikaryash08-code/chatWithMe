@@ -102,7 +102,7 @@ test('Worldwide connects across countries without requiring coordinates', async 
   a.send('join', { adult: true, pool: { scope: 'world', country: 'IN' } }); await a.wait('waiting');
   b.send('join', { adult: true, pool: { scope: 'world', country: 'GB' } });
   const [am, bm] = await Promise.all([a.wait('matched'), b.wait('matched')]);
-  assert.equal(am.room, bm.room); assert.equal(am.location, 'Worldwide'); assert.equal(am.nearest, false); assert.equal(am.lat, undefined);
+  assert.equal(am.room, bm.room); assert.equal(am.location, 'Worldwide'); assert.equal(am.nearest, false); assert.equal(am.lat, undefined); assert.equal(am.partnerLocation, null); assert.equal(bm.partnerLocation, null);
  } finally { await a.close(); await b.close(); }
 });
 for (const selected of [pool, { scope: 'region', country: 'IN', region: 'MH' }, { scope: 'country', country: 'IN' }, { scope: 'world' }]) {
@@ -148,3 +148,34 @@ for (const preferNearest of [false, true]) {
   } finally { await a.close(); await b.close(); await c.close(); }
  });
 }
+test('matched strangers receive their partner’s selected city and country', async () => {
+ const a = await client(), b = await client();
+ try {
+  a.send('join', { adult: true, pool }); await a.wait('waiting');
+  b.send('join', { adult: true, pool });
+  const [am,bm] = await Promise.all([a.wait('matched'), b.wait('matched')]);
+  for (const event of [am,bm]) assert.deepEqual(event.partnerLocation, { city: 'Pune', country: 'India', label: 'Pune, India', source: 'selected-area' });
+ } finally { await a.close(); await b.close(); }
+});
+test('Worldwide shares each partner’s optional location, not the viewer’s location or coordinates', async () => {
+ const a = await client(), b = await client();
+ try {
+  a.send('join', { adult: true, pool: { scope: 'world' }, displayLocation: { country: 'IN', city: 'Pune', lat: 18.52, lon: 73.85 } }); await a.wait('waiting');
+  b.send('join', { adult: true, pool: { scope: 'world' }, displayLocation: { country: 'GB', city: 'London' } });
+  const [am,bm] = await Promise.all([a.wait('matched'), b.wait('matched')]);
+  assert.deepEqual(am.partnerLocation, { city: 'London', country: 'United Kingdom', label: 'London, United Kingdom', source: 'shared' });
+  assert.deepEqual(bm.partnerLocation, { city: 'Pune', country: 'India', label: 'Pune, India', source: 'shared' });
+  assert.equal(am.location, 'Worldwide'); assert.equal(bm.location, 'Worldwide');
+ } finally { await a.close(); await b.close(); }
+});
+test('invalid shared cities are rejected; country-only matches never invent a city', async () => {
+ const a = await client(), b = await client();
+ try {
+  a.send('join', { adult: true, pool: { scope: 'world' }, displayLocation: { city: '<img onerror=alert(1)>', country: 'IN' } }); await a.wait('error');
+  a.send('join', { adult: true, pool: { scope: 'world' }, displayLocation: { city: 'Paris', country: 'IN' } }); await a.wait('error');
+  a.send('join', { adult: true, pool: { scope: 'country', country: 'IN' } }); await a.wait('waiting');
+  b.send('join', { adult: true, pool: { scope: 'country', country: 'IN' } });
+  const [am,bm] = await Promise.all([a.wait('matched'), b.wait('matched')]);
+  for (const event of [am,bm]) { assert.equal(event.partnerLocation.city, null); assert.equal(event.partnerLocation.country, 'India'); }
+ } finally { await a.close(); await b.close(); }
+});

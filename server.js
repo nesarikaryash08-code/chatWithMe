@@ -51,7 +51,7 @@ export function createApp({ reportDirectory = '.data' } = {}) {
     rooms.set(id, room);
     for (const [a, b] of [[s, candidate], [candidate, s]]) {
       a.room = id; a.lastPartner = b.id;
-      emit(a, 'matched', { room: id, location: a.pool.scope === 'nearby' ? 'Within 100 km' : a.pool.label, nearest: a.pool.preferNearest });
+      emit(a, 'matched', { room: id, location: a.pool.scope === 'nearby' ? 'Within 100 km' : a.pool.label, nearest: a.pool.preferNearest, partnerLocation: b.displayLocation });
     }
   }
   function validatePool(p) {
@@ -76,6 +76,22 @@ export function createApp({ reportDirectory = '.data' } = {}) {
     const city = getCities(p.country, p.region).find(c => c.name === p.city);
     if (!city) throw Error('Select a city.');
     return makePool(`city:${p.country}:${p.region}:${city.name}`, city.name);
+  }
+  function displayLocation(value, pool) {
+    // Display places are chosen by participants, never claimed as verified GPS locations.
+    if (value !== undefined && value !== null) {
+      if (!value || typeof value !== 'object' || typeof value.country !== 'string' || typeof value.city !== 'string' || value.city.length > 150) throw Error('Choose a valid city and country to share.');
+      const country = countries.find(c => c.isoCode === value.country);
+      const city = country && City.getCitiesOfCountry(country.isoCode).find(c => c.name === value.city);
+      if (!city) throw Error('Choose a valid city and country to share.');
+      return { city: city.name, country: country.name, label: `${city.name}, ${country.name}`, source: 'shared' };
+    }
+    if (['city', 'region', 'country'].includes(pool.scope)) {
+      const country = countries.find(c => c.isoCode === pool.country);
+      if (pool.scope === 'city') return { city: pool.city, country: country.name, label: `${pool.city}, ${country.name}`, source: 'selected-area' };
+      return { city: null, country: country.name, label: country.name, source: 'selected-area' };
+    }
+    return null;
   }
   const server = http.createServer(async (req, res) => {
     try {
@@ -125,7 +141,9 @@ export function createApp({ reportDirectory = '.data' } = {}) {
           if (event.type === 'join') {
             if (event.adult !== true) throw Error('Confirm that you are 18 or older.');
             if (!rateLimit(`join:${s.id}`, 20, 60_000)) throw Error('Please wait a minute before searching again.');
-            const pool = validatePool(event.pool); end(s); s.pool = pool; match(s);
+            const pool = validatePool(event.pool);
+            const place = displayLocation(event.displayLocation, event.pool);
+            end(s); s.pool = pool; s.displayLocation = place; match(s);
           } else if (event.type === 'leave') { end(s); emit(s, 'left'); }
           else if (event.type === 'message') {
             const room = rooms.get(s.room);

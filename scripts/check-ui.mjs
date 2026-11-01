@@ -9,7 +9,7 @@ try {
  const a = await first.newPage(), b = await second.newPage();
  for (const page of [a,b]) { page.on('pageerror', e => errors.push(e.message)); await page.goto(base); await page.waitForFunction(() => document.getElementById('city').value === 'Pune' && !document.getElementById('find').disabled); }
  await a.screenshot({ path: '/tmp/chatwithme-desktop.png', fullPage: true });
- await a.getByRole('button', { name: 'How it works' }).click(); await a.getByRole('heading', { name: 'One place. Two strangers.' }).waitFor(); await a.getByRole('button', { name: 'Close dialog' }).click();
+ await a.getByRole('button', { name: 'How it works' }).click(); await a.getByRole('heading', { name: 'One place. Two friends.' }).waitFor(); await a.getByRole('button', { name: 'Close dialog' }).click();
  for (const page of [a,b]) { await page.locator('#adult').check(); await page.locator('#find').click(); }
  for (const page of [a,b]) await page.locator('#message').waitFor({ state: 'visible' });
  await a.waitForFunction(() => !document.getElementById('message').disabled);
@@ -30,7 +30,7 @@ try {
  assert.equal(await a.locator('.message-bubble img').count(), 0);
  await a.screenshot({ path: '/tmp/chatwithme-conversation.png', fullPage: true });
  await a.locator('#block').click(); await a.locator('#confirm-block').click(); await a.getByText('Your comfort comes first.', { exact: true }).first().waitFor();
- await b.getByText('Stranger has left. Choose Find someone to start fresh.').waitFor();
+ await b.getByText('Friend has left. Choose Find someone to start fresh.').waitFor();
  await a.locator('[data-scope="country"]').click(); await a.locator('#country').selectOption('GB');
  await a.waitForFunction(() => document.getElementById('region').options[0]?.text !== 'Loading regions…');
  await a.locator('#find').click(); await a.getByText('Looking for your next hello…').waitFor(); await a.locator('#cancel').click();

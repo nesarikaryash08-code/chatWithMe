@@ -26,7 +26,7 @@ test('worldwide location hierarchy and static application work', async () => {
  const html = await fetch(base); assert.equal(html.status, 200); assert.match(await html.text(), /id="match-form"/);
  assert.equal((await fetch(base + '/server.js')).status, 404);
 });
-test('two strangers match, type, send and deduplicate messages; rooms reject unauthorized IDs', async () => {
+test('two friends match, type, send and deduplicate messages; rooms reject unauthorized IDs', async () => {
  const { a, b, room } = await paired();
  try {
   a.send('typing'); await b.wait('typing');
@@ -67,7 +67,7 @@ test('nearby matches only within the distance limit and never exposes coordinate
   const match = await a.wait('matched'); await c.wait('matched'); assert.equal(match.location, 'Within 100 km'); assert.equal(match.lat, undefined); assert.equal(b.queue.some(e => e.type === 'matched'), false);
  } finally { await a.close(); await b.close(); await c.close(); }
 });
-test('block excludes the pair while a different stranger can match', async () => {
+test('block excludes the pair while a different friend can match', async () => {
  const { a, b } = await paired(); const c = await client();
  try {
   a.send('block'); await a.wait('blocked'); await b.wait('partner_left');
@@ -106,7 +106,7 @@ test('Worldwide connects across countries without requiring coordinates', async 
  } finally { await a.close(); await b.close(); }
 });
 for (const selected of [pool, { scope: 'region', country: 'IN', region: 'MH' }, { scope: 'country', country: 'IN' }, { scope: 'world' }]) {
- test(`${selected.scope}: nearest mode chooses the closest eligible waiting stranger, not queue order`, async () => {
+ test(`${selected.scope}: nearest mode chooses the closest eligible waiting friend, not queue order`, async () => {
   // Block these two first, so both can wait simultaneously for a third person.
   const { a, b } = await paired(); const c = await client();
   try {
@@ -148,7 +148,7 @@ for (const preferNearest of [false, true]) {
   } finally { await a.close(); await b.close(); await c.close(); }
  });
 }
-test('matched strangers receive their partner’s selected city and country', async () => {
+test('matched friends receive their partner’s selected city and country', async () => {
  const a = await client(), b = await client();
  try {
   a.send('join', { adult: true, pool }); await a.wait('waiting');
